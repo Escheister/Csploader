@@ -64,7 +64,7 @@ namespace BootloaderProtocol
             _targetSign.CopyTo(loadField, 0);
             ((ushort)CmdOutput.LOAD_DATA_PAGE).GetReverseBytes().CopyTo(loadField, 2);
             data.CopyTo(loadField, 4);
-            return new CRC16_CCITT_FALSE().CRC_calc(loadField);
+            return new CRC16_CCITT_FALSE().CrcCalc(loadField);
         }
         private void GetStringsFromFile(string path, out string[] fileStrings)
         {

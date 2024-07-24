@@ -42,7 +42,7 @@ namespace CommandsHandler
         private ProtocolReply GetReply(byte[] bufferIn, byte[] rmSign, CmdInput cmdMain)
         {
             if (bufferIn.Length == 0) return ProtocolReply.Null;
-            if (Options.checkCrc && !CRC16_CCITT_FALSE.CRC_check(bufferIn)) return ProtocolReply.WCrc;
+            if (Options.checkCrc && !CRC16_CCITT_FALSE.CrcCheck(bufferIn)) return ProtocolReply.WCrc;
             if (!SignatureEqual(bufferIn, rmSign)) return ProtocolReply.WSign;
             if (!CmdInputEqual(bufferIn, cmdMain)) return ProtocolReply.WCmd;
             return ProtocolReply.Ok;
@@ -50,7 +50,7 @@ namespace CommandsHandler
         private ProtocolReply GetReply(byte[] bufferIn, byte[] rmThrough, CmdInput cmdThrough, byte[] rmSign, CmdInput cmdMain)
         {
             if (bufferIn.Length == 0) return ProtocolReply.Null;
-            if (Options.checkCrc && !CRC16_CCITT_FALSE.CRC_check(bufferIn)) return ProtocolReply.WCrc;
+            if (Options.checkCrc && !CRC16_CCITT_FALSE.CrcCheck(bufferIn)) return ProtocolReply.WCrc;
             if (!SignatureEqual(bufferIn, rmThrough, rmSign)) return ProtocolReply.WSign;
             if (!CmdInputEqual(bufferIn, cmdThrough, cmdMain)) return ProtocolReply.WCmd;
             return ProtocolReply.Ok;
@@ -119,7 +119,7 @@ namespace CommandsHandler
             data.AddRange(rmSign);
             data.AddRange(BitConverter.GetBytes((ushort)cmd).Reverse());
             if (ix != 0xff) data.Add(ix);
-            if (crc) return new CRC16_CCITT_FALSE().CRC_calc(data.ToArray());
+            if (crc) return new CRC16_CCITT_FALSE().CrcCalc(data.ToArray());
             return data.ToArray();
         }
         public byte[] CmdThroughRm(byte[] cmdIn, byte[] rmThrough, CmdOutput cmd)
@@ -128,7 +128,7 @@ namespace CommandsHandler
             rmThrough.CopyTo(cmdOut, 0);
             ((ushort)cmd).GetReverseBytes().CopyTo(cmdOut, 2);
             cmdIn.CopyTo(cmdOut, 4);
-            return new CRC16_CCITT_FALSE().CRC_calc(cmdOut);
+            return new CRC16_CCITT_FALSE().CrcCalc(cmdOut);
         }
         async private Task<byte[]> SocketReceiveData(int length, int ms = 250)
         {

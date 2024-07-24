@@ -37,7 +37,7 @@ namespace CRC16
                                                 0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
                                                 0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
                                                 0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0};
-        public byte[] CRC_calc(byte[] buffer)
+        public byte[] CrcCalc(byte[] buffer)
         {
             byte[] new_buffer = new byte[buffer.Length + 2];
             byte[] crc_bytes;
@@ -49,13 +49,12 @@ namespace CRC16
             crc_bytes.CopyTo(new_buffer, buffer.Length);
             return new_buffer;
         }
-        public static bool CRC_check(byte[] buffer)
+        public static bool CrcCheck(byte[] buffer)
         {
             ushort crc = 0xffff;
             for (int i = 0; i < buffer.Length; ++i)
                 crc = (ushort)((crc << 8) ^ table[(crc >> 8) ^ (0xff & buffer[i])]);
-            if (crc == 0) return true;
-            else return false;
+            return crc == 0;
         }
     }
 }
