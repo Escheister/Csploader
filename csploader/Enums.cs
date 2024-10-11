@@ -5,12 +5,13 @@
         Ok = 0, 
         Null = 1,
         WCrc = 2,
-        WSign = 3,
+        WSig = 3,
         WCmd = 4, 
-        WData = 5,
+        WDat = 5,
     }
     enum CmdOutput : ushort // Request
     {
+        NONE = 0x0000,
         ROUTING_THROUGH = 0x0210,
         ROUTING_PROG = 0x0211,
         START_BOOTLOADER = 0x1000, 
@@ -20,6 +21,7 @@
     }
     enum CmdInput : ushort  // Reply
     {
+        NONE = 0x0000,
         ROUTING_THROUGH = 0x8210, 
         ROUTING_PROG = 0x8211,
         START_BOOTLOADER = 0x9002, 

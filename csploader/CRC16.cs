@@ -56,5 +56,11 @@ namespace CRC16
                 crc = (ushort)((crc << 8) ^ table[(crc >> 8) ^ (0xff & buffer[i])]);
             return crc == 0;
         }
+        public static ushort CrcCalcRT(byte[] buffer, ushort crc)
+        {
+            for (int i = 0; i < buffer.Length; ++i)
+                crc = (ushort)((crc << 8) ^ table[(crc >> 8) ^ (0xff & buffer[i])]);
+            return crc;
+        }
     }
 }

@@ -9,6 +9,7 @@ using StaticSettings;
 using ProtocolEnums;
 using Extensions;
 using CRC16;
+using System.Diagnostics;
 
 namespace CommandsHandler
 {
@@ -16,6 +17,7 @@ namespace CommandsHandler
     {
         protected delegate void SendDataDelegate(byte[] cmdOut);
         protected delegate Task<byte[]> ReceiveDataDelegate(int length, int ms = 250);
+        public delegate void ClearBufferDelegate();
         public CommandsOutput(object sender) { GetTypeDevice(sender); }
 
 
@@ -23,6 +25,9 @@ namespace CommandsHandler
         private SendDataDelegate sendData;
         private SerialPort Port;
         private Socket Sock;
+        public bool through = true;
+
+        public ClearBufferDelegate clearBuffer;
 
         private void GetTypeDevice(object sender)
         {
@@ -31,19 +36,29 @@ namespace CommandsHandler
                 Port = ser;
                 sendData += (byte[] data) => Port.Write(data, 0, data.Length);
                 receiveData = SerialReceiveData;
+                clearBuffer += () =>
+                {
+                    if (Port.IsOpen && Port.BytesToRead > 0)
+                        Port.DiscardInBuffer();
+                };
             }
             else if (sender is Socket sock)
             {
                 Sock = sock;
                 sendData += (byte[] data) => Sock.Send(data);
                 receiveData = SocketReceiveData;
+                clearBuffer += () =>
+                {
+                    if (Sock.Connected && Sock.Available > 0)
+                        Sock.Receive(new byte[Sock.Available]);
+                };
             }
         }
         private ProtocolReply GetReply(byte[] bufferIn, byte[] rmSign, CmdInput cmdMain)
         {
             if (bufferIn.Length == 0) return ProtocolReply.Null;
             if (Options.checkCrc && !CRC16_CCITT_FALSE.CrcCheck(bufferIn)) return ProtocolReply.WCrc;
-            if (!SignatureEqual(bufferIn, rmSign)) return ProtocolReply.WSign;
+            if (!SignatureEqual(bufferIn, rmSign)) return ProtocolReply.WSig;
             if (!CmdInputEqual(bufferIn, cmdMain)) return ProtocolReply.WCmd;
             return ProtocolReply.Ok;
         }
@@ -51,13 +66,13 @@ namespace CommandsHandler
         {
             if (bufferIn.Length == 0) return ProtocolReply.Null;
             if (Options.checkCrc && !CRC16_CCITT_FALSE.CrcCheck(bufferIn)) return ProtocolReply.WCrc;
-            if (!SignatureEqual(bufferIn, rmThrough, rmSign)) return ProtocolReply.WSign;
+            if (!SignatureEqual(bufferIn, rmThrough, rmSign)) return ProtocolReply.WSig;
             if (!CmdInputEqual(bufferIn, cmdThrough, cmdMain)) return ProtocolReply.WCmd;
             return ProtocolReply.Ok;
         }
         private ProtocolReply GetDataReply(byte[] bufferIn, byte[] bufferOut)
         {
-            if (!DataEqual(bufferIn, bufferOut)) return ProtocolReply.WData;
+            if (!DataEqual(bufferIn, bufferOut)) return ProtocolReply.WDat;
             return ProtocolReply.Ok;
         }
         private bool SignatureEqual(byte[] bufferIn, byte[] rmSign)
@@ -96,19 +111,15 @@ namespace CommandsHandler
         }
         private bool DataEqual(byte[] bufferIn, byte[] bufferOut)
         {
+            int start = through ? 8 : 4;
+            int crap = through ? 12 : 6;
             try
             {
-                int start = 4;
-                int crap = 6;
-                if (Options.through)
-                {
-                    start += 8;
-                    crap += 12;
-                }
+
                 byte[] data_out = new byte[bufferOut.Length - crap];
                 byte[] data_in = new byte[bufferOut.Length - crap];
                 Array.Copy(bufferOut, start, data_out, 0, data_out.Length);
-                Array.Copy(bufferIn, start, data_in, 0, data_in.Length);
+                Array.Copy(bufferIn, start, data_in, 0, data_out.Length);
                 return Enumerable.SequenceEqual(data_out, data_in);
             }
             catch { return false; }
@@ -132,33 +143,45 @@ namespace CommandsHandler
         }
         async private Task<byte[]> SocketReceiveData(int length, int ms = 250)
         {
-            DateTime t0 = DateTime.Now;
-            TimeSpan tstop;
-            int bytes;
+            Stopwatch sw = Stopwatch.StartNew();
+            IEnumerable<byte> buffer = new List<byte>();
+            ArraySegment<Byte> tBuffer;
+            ushort crc = 0xffff;
             do
             {
-                bytes = Sock.Available;
-                tstop = DateTime.Now - t0;
+                if (Sock.Available > 0)
+                {
+                    tBuffer = new ArraySegment<byte>(new byte[Sock.Available]);
+                    await Sock.ReceiveAsync(tBuffer, SocketFlags.None);
+                    buffer = buffer.Concat(tBuffer);
+                    crc = CRC16_CCITT_FALSE.CrcCalcRT(tBuffer.Array, crc);
+                }
             }
-            while (bytes < length && tstop.Milliseconds <= ms);
-            ArraySegment<Byte> buffer = new ArraySegment<byte>(new byte[bytes]);
-            if (bytes > 0) await Sock.ReceiveAsync(buffer, SocketFlags.None);
+            while (sw.Elapsed.Milliseconds < ms && crc != 0 && buffer.Count() < length);
+            sw.Stop();
+            clearBuffer();
             return buffer.ToArray();
         }
         async private Task<byte[]> SerialReceiveData(int length, int ms = 250)
         {
-            DateTime t0 = DateTime.Now;
-            TimeSpan tstop;
-            int bytes;
+            Stopwatch sw = Stopwatch.StartNew();
+            IEnumerable<byte> buffer = new List<byte>();
+            byte[] tBuffer;
+            ushort crc = 0xffff;
             do
             {
-                bytes = Port.BytesToRead;
-                tstop = DateTime.Now - t0;
+                if (Port.BytesToRead > 0)
+                {
+                    tBuffer = new byte[Port.BytesToRead];
+                    await Port.BaseStream.ReadAsync(tBuffer, 0, tBuffer.Length);
+                    crc = CRC16_CCITT_FALSE.CrcCalcRT(tBuffer, crc);
+                    buffer = buffer.Concat(tBuffer);
+                }
             }
-            while (bytes < length && tstop.Milliseconds <= ms);
-            byte[] buffer = new byte[bytes];
-            if (buffer.Length > 0) await Port.BaseStream.ReadAsync(buffer, 0, bytes);
-            return buffer;
+            while (sw.Elapsed.Milliseconds < ms && crc != 0 && buffer.Count() < length);
+            sw.Stop();
+            clearBuffer();
+            return buffer.ToArray();
         }
         async public Task<Tuple<byte[], ProtocolReply>> GetData(byte[] cmdOut, int size, int ms = 50)
         {
@@ -172,10 +195,12 @@ namespace CommandsHandler
                         CmdOutput cmdTwo = (CmdOutput)((cmdOut[6] << 8) | cmdOut[7]);
                         Enum.TryParse(Enum.GetName(typeof(CmdOutput), cmdOne), out cmdThrough);
                         Enum.TryParse(Enum.GetName(typeof(CmdOutput), cmdTwo), out cmdMain);
+                        through = true;
                         break;
                     default:
                         Enum.TryParse(Enum.GetName(typeof(CmdOutput), cmdOne), out cmdMain);
-                        cmdThrough = CmdInput.ROUTING_THROUGH;
+                        cmdThrough = CmdInput.NONE;
+                        through = false;
                         break;
                 }
             }

@@ -13,6 +13,7 @@ using BootloaderProtocol;
 using StaticSettings;
 using ProtocolEnums;
 using Extensions;
+using System.Reflection;
 
 namespace csploader
 {
@@ -100,7 +101,7 @@ namespace csploader
 " /t                    : Время ожидания ответа       \r\n" +
 "    [Seconds]          > {2-999}             default <30>   \r\n\r\n" +
 " /nocrc                : Пропускает проверку CRC            \r\n" +
-" /norepeat             : Пропускает вопрос о повторе        \r\n");
+" /norepeat             : Пропускает вопрос о повторе");
             Console.ReadKey(true);
         }
         private static void TrySetSettings(string[] args)
@@ -236,6 +237,7 @@ namespace csploader
         }
         public static void Main(string[] args)
         {
+            Console.WriteLine($"{Assembly.GetEntryAssembly().GetName().Name} {Assembly.GetEntryAssembly().GetName().Version}");
             if (args.Length == 0)
             {
                 GetHelp();
@@ -268,11 +270,10 @@ namespace csploader
         {
             async Task<bool> check_ip(IPAddress ipAddr)
             {
-                int timeout = 1000;
                 using Ping ping = new Ping();
                 byte[] buffer = new byte[32];
                 PingOptions pingOptions = new PingOptions(buffer.Length, true);
-                PingReply reply = await ping.SendPingAsync(ipAddr, timeout, buffer, pingOptions);
+                PingReply reply = await ping.SendPingAsync(ipAddr, 255, buffer, pingOptions);
                 return reply.Status == IPStatus.Success;
             }
 
@@ -322,9 +323,9 @@ namespace csploader
         }
         async private static Task HexUploadAsync()
         {
-            BootloaderNew boot = Options.through
-                ? new BootloaderNew(Options.mainInterface, Options.targetSign.GetBytes(), Options.throughSign.GetBytes())
-                : new BootloaderNew(Options.mainInterface, Options.targetSign.GetBytes());
+            Bootloader boot = Options.through
+                ? new Bootloader(Options.mainInterface, Options.targetSign.GetBytes(), Options.throughSign.GetBytes())
+                : new Bootloader(Options.mainInterface, Options.targetSign.GetBytes());
 
             Console.WriteLine(Options.through
                             ? $"Target sign:{Options.targetSign} through: {Options.throughSign}"
@@ -340,13 +341,13 @@ namespace csploader
             {
                 DateTime t0 = DateTime.Now;
                 TimeSpan tstop = DateTime.Now - t0;
-                string procPercent = $"[{(boot.HexQueue.Count() > 0 ? Math.Round(100.000 - (100.000 * boot.HexQueue.Count() / allLines), 2) : 100)}%]";
+                string procPercent = $"[{(boot.HexQueue.Count() > 0 ? Math.Round(100.000 - (100.000 * boot.HexQueue.Count() / allLines), 2) : 100) : 000.00}%]";
                 while (tstop.Seconds < Options.hexTimeout)
                 {
                     try
                     {
                         Tuple<byte[], ProtocolReply> replyes = await boot.GetData(cmdOut, cmdOut.Length, receiveDelay);
-                        Console.Write($"{$"{procPercent} {replyes.Item2}", 15}");
+                        Console.Write($"{$"{procPercent}", -10} {$"{replyes.Item2}", 4}");
                         Console.SetCursorPosition(15, Console.CursorTop);
                         return true;
                     }
@@ -386,13 +387,12 @@ namespace csploader
             Console.WriteLine();
             Console.Write($"{"Firmware...", -15}");
 
-            Stopwatch stopwatchQueue = new Stopwatch();
-            stopwatchQueue.Start();
+            Stopwatch stopwatchQueue = Stopwatch.StartNew();
 
             while (boot.HexQueue.Count() > 0)
             {
                 boot.GetDataForUpload(out byte[] dataOutput);
-                if (!await GetReplyFromDevice(boot.buildDataCmdDelegate(dataOutput), receiveDelay: 250)) throw new UploaderException(7);
+                if (!await GetReplyFromDevice(boot.buildDataCmdDelegate(dataOutput), receiveDelay: 150)) throw new UploaderException(7);
                 if (!await GetReplyFromDevice(cmdConfirmData, taskDelay: true, delayMs: 10)) throw new UploaderException(7);
             }
             await GetReplyFromDevice(cmdBootStop, taskDelay: true);

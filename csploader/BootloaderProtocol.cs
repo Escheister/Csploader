@@ -11,12 +11,12 @@ using CRC16;
 
 namespace BootloaderProtocol
 {
-    internal class BootloaderNew : CommandsOutput
+    internal class Bootloader : CommandsOutput
     {
         public delegate byte[] BuildCmdDelegate(CmdOutput cmdOutput);
         public delegate byte[] BuildDataCmdDelegate(byte[] data);
 
-        public BootloaderNew(object sender, byte[] targetSign) : base(sender)
+        public Bootloader(object sender, byte[] targetSign) : base(sender)
         {
             _addrHex = new byte[2];
             _addrElar = new byte[2];
@@ -24,7 +24,7 @@ namespace BootloaderProtocol
             buildCmdDelegate += BuildCmd;
             buildDataCmdDelegate += BuildDataCmd;
         }
-        public BootloaderNew(object sender, byte[] targetSign, byte[] throughSign) : base(sender)
+        public Bootloader(object sender, byte[] targetSign, byte[] throughSign) : base(sender)
         {
             _addrHex = new byte[2];
             _addrElar = new byte[2];
@@ -107,14 +107,14 @@ namespace BootloaderProtocol
         public void GetDataForUpload(out byte[] dataOutput)
         {
             bool GetAccessToDequeuing(byte[] dequeued)
-                =>  dequeued[0] == 0x10 && hexQueue.Count != 0 && (RecordType)hexQueue.Peek()[3] == RecordType.Rec;
+                => dequeued[0] == 0x10 && hexQueue.Count != 0 && (RecordType)hexQueue.Peek()[3] == RecordType.Rec;
 
             List<byte> data = new List<byte>();
             List<byte> cmd = new List<byte>();
             while (pageSize > data.Count)
             {
                 byte[] dequeueArray = hexQueue.Dequeue();
-                switch ((RecordType)dequeueArray[3]) 
+                switch ((RecordType)dequeueArray[3])
                 {
                     case RecordType.Rec: // 0x00
                         if (data.Count == 0) _addrHex = new byte[] { dequeueArray[2], dequeueArray[1] };
